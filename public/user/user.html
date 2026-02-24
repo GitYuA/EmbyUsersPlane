@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emby 账号状态查询</title>
+    
+    <link rel="stylesheet" href="../assets/style.css">
+    
+    
+</head>
+<body class="login-mode user-query">
+
+<div class="card user-card">
+    <div class="header"><h1>账号自助查询</h1></div>
+    
+    <div class="user-content">
+        <div class="search-wrapper">
+            <div class="input-label">请输入您的 Emby 用户名</div>
+            
+            <div class="centered-input">
+                <input type="text" id="username" placeholder="Username" autocomplete="off" onkeydown="if(event.keyCode===13) queryUser()">
+            </div>
+            
+            <button class="btn btnp btn-lg" onclick="queryUser()" id="queryBtn">立即查询</button>
+        </div>
+
+        <div id="resultContainer">
+            <!-- 结果将动态插入这里-->
+        </div>
+
+        <div class="user-hint">
+            如有疑问，请联系管理员        </div>
+
+        <!-- 模板 -->
+        <template id="resultTemplate">
+            <div class="server-result-card">
+                <div class="hr"></div>
+                
+                <div class="info-grid">
+                    <div class="info-box">
+                        <div class="info-label">用户名</div>
+                        <div class="info-value resName">--</div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-label">所属服务器</div>
+                        <div class="info-value resServer">--</div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-label">当前状态</div>
+                        <div class="info-value"><span class="resStatus status"></span></div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-label">开通日期</div>
+                        <div class="info-value resOpenDate">--</div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-label">到期时间</div>
+                        <div class="info-value resExpire">--</div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-label">剩余天数</div>
+                        <div class="info-value resDays">--</div>
+                    </div>
+                </div>
+
+                <div class="history-container">
+                    <div class="history-header">
+                        <span>续期记录</span>
+                        <span class="history-meta">最近10条</span>
+                    </div>
+                    <div class="history-list"></div>
+                </div>
+            </div>
+        </template>
+    </div>
+</div>
+
+<div id="toast" class="custom-toast"></div>
+
+<script src="../assets/script.js"></script>
+<script>
+    function showToast(msg, isSuccess = true) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'custom-toast ' + (isSuccess ? 'toast-success' : 'toast-error');
+        t.style.display = 'block';
+        t.style.animation = 'toastIn .4s ease forwards';
+        setTimeout(() => {
+            t.style.animation = 'toastOut .5s ease forwards';
+            setTimeout(() => t.style.display = 'none', 500);
+        }, 2500);
+    }
+
+    const queryToken = new URLSearchParams(window.location.search).get('token') || '';
+
+    function queryUser() {
+        const username = document.getElementById('username').value.trim();
+        if (!username) return showToast('请输入用户名', false);
+
+        const btn = document.getElementById('queryBtn');
+        const container = document.getElementById('resultContainer');
+        
+        btn.disabled = true;
+        btn.textContent = '查询中...';
+        container.style.display = 'none';
+        container.innerHTML = ''; // 清空旧结果
+        const params = new URLSearchParams();
+        params.set('username', username);
+        if (queryToken) {
+            params.set('token', queryToken);
+        }
+
+        fetch('query.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString()
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success && res.data && res.data.length > 0) {
+                // 隐藏搜索框
+                document.querySelector('.search-wrapper').style.display = 'none';
+                container.style.display = 'block';
+                
+                res.data.forEach(userData => {
+                    const clone = document.getElementById('resultTemplate').content.cloneNode(true);
+                    
+                    // 填充数据
+                    clone.querySelector('.resName').textContent = userData.name;
+                    clone.querySelector('.resServer').textContent = userData.serverName;
+                    clone.querySelector('.resOpenDate').textContent = userData.openDate ? userData.openDate.split(' ')[0] : '未知';
+                    
+                    const statusEl = clone.querySelector('.resStatus');
+                    statusEl.textContent = userData.status;
+                    statusEl.className = 'resStatus status ' + (userData.status === '已启用' || userData.status === '管理员' ? 'status-active' : 'status-inactive');
+                    
+                    const daysEl = clone.querySelector('.resDays');
+                    daysEl.textContent = userData.daysLeft;
+                    if (userData.daysLeft === '永久') {
+                        daysEl.classList.add('forever');
+                    } else {
+                        const days = parseInt(userData.daysLeft);
+                        if(days <= 0) daysEl.style.color = 'var(--danger)';
+                    }
+                    
+                    clone.querySelector('.resExpire').textContent = userData.expireDate;
+                    
+                    // 历史记录
+                    if (userData.history && userData.history.length > 0) {
+                        const histContainer = clone.querySelector('.history-container');
+                        const histList = clone.querySelector('.history-list');
+                        histContainer.style.display = 'block';
+                        
+                        userData.history.forEach(h => {
+                            const item = document.createElement('div');
+                            item.className = 'hist-item';
+
+                            const left = document.createElement('div');
+                            const daysEl = document.createElement('div');
+                            const dateEl = document.createElement('div');
+                            const noteEl = document.createElement('div');
+
+                            daysEl.className = 'hist-days';
+                            dateEl.className = 'hist-date';
+                            noteEl.className = 'hist-note';
+
+                            const daysVal = (h && h.days !== undefined && h.days !== null) ? String(h.days) : '0';
+                            const dateVal = (h && h.date) ? String(h.date) : '';
+                            const noteVal = (h && h.note) ? String(h.note) : '管理员充值';
+
+                            daysEl.textContent = `+${daysVal}天`;
+                            dateEl.textContent = dateVal;
+                            noteEl.textContent = noteVal;
+                            noteEl.title = noteVal;
+
+                            left.appendChild(daysEl);
+                            left.appendChild(dateEl);
+                            item.appendChild(left);
+                            item.appendChild(noteEl);
+                            histList.appendChild(item);
+                        });
+                    }
+                    
+                    container.appendChild(clone);
+                });
+                
+                // 简单的入场动画
+                container.classList.remove('animate-in');
+                void container.offsetWidth; // trigger reflow
+                container.classList.add('animate-in');
+                
+                showToast('查询成功');
+                document.getElementById('username').blur();
+                
+            } else {
+                showToast(res.message || '未找到该用户', false);
+            }
+        })
+        .catch(err => {
+            showToast('查询出错，请稍后重试', false);
+            console.error(err);
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.textContent = '立即查询';
+        });
+    }
+</script>
+</body>
+</html>
