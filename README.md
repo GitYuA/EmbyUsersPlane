@@ -1,172 +1,295 @@
+<div align="center">
+
 # Emby Users Panel
 
-Emby 用户管理面板 (Go 实现)，专为 Emby 媒体服务器设计的轻量级用户管理系统。集成了多服务器管理、用户状态监控、自动过期处理、充值续费、SMTP 通知以及日志审计等功能。
+**轻量、全能的 Emby 用户生命周期管理面板**
 
-## 🌟 核心特性
+单二进制 · 零外部依赖 · 多服务器 · Docker 一键部署
 
-- **多服务器支持**：在统一面板管理多个 Emby 服务器实例，支持一键切换。
-- **用户生命周期管理**：
-  - 创建、编辑、删除 Emby 用户。
-  - 支持充值/续费操作，自动计算过期时间。
-  - 一键启用/禁用用户。
-  - 批量操作支持。
-- **自动化任务**：
-  - 定时检查用户过期状态。
-  - 支持过期自动禁用或自动删除策略。
-  - 自定义保留期与通知时间。
-- **通知系统**：
-  - SMTP 邮件通知集成。
-  - 支持到期提醒、操作通知。
-- **数据安全与审计**：
-  - 完整的操作日志记录与浏览。
-  - 结构化日志支持关键字过滤。
-  - 用户数据备份（导出 JSON）与恢复。
-- **独立查询门户**：
-  - 提供无需登录的公开查询页面，供用户自助查询账号状态。
-  - 支持 IP 频率限制与 Token 校验保护。
+![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-Pure_Go-003B57?logo=sqlite&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-## 🚀 快速开始
+</div>
+
+---
+
+## 目录
+
+- [功能概览](#功能概览)
+- [技术架构](#技术架构)
+- [快速开始](#快速开始)
+- [配置指南](#配置指南)
+- [项目结构](#项目结构)
+- [API 参考](#api-参考)
+- [安全机制](#安全机制)
+- [开发指南](#开发指南)
+- [License](#license)
+
+---
+
+## 功能概览
+
+### 用户管理
+- 创建、编辑、充值/续费、启用/禁用、删除用户
+- 批量操作：充值、修改、启用、禁用、删除
+- 从模板用户复制权限与配置创建新用户
+- 用户分组管理与备注
+
+### 多服务器
+- 同时管理多台 Emby 服务器，面板内一键切换
+- 每台服务器独立数据库、独立配置覆盖（定时任务、SMTP、过期策略等）
+
+### 自动化任务
+- 可配置的每日定时检测，自动禁用或删除过期用户
+- 到期前 N 天邮件提醒通知
+- 操作通知邮件（充值、创建等）
+
+### 播放统计
+- 集成 Emby Playback Reporting 插件，展示用户播放记录
+- 在线会话实时监控
+
+### 用户自助查询
+- 独立端口的用户查询页面，用户可自行查看到期时间
+- 可选 Token 验证保护
+
+### 数据管理
+- 一键导出 / 导入 JSON 备份
+- 操作日志记录与下载
+- 配置文件自动持久化
+
+### 界面体验
+- 浅色 / 深色 / 跟随系统主题切换
+- 完整的移动端响应式适配
+
+---
+
+## 技术架构
+
+| 层级 | 选型 | 说明 |
+|:-----|:-----|:-----|
+| **后端** | Go 1.24 | 纯标准库 `net/http`，无 Web 框架 |
+| **数据库** | SQLite | 纯 Go 驱动 ([modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite))，无 CGO |
+| **认证** | bcrypt + Session | 密码哈希存储，CSRF Token 防护 |
+| **前端** | HTML / CSS / JS | 原生实现，零框架依赖 |
+| **部署** | Docker | 多阶段构建，Alpine 基础镜像，约 20MB |
+
+---
+
+## 快速开始
 
 ### 方式一：Docker Compose（推荐）
 
-1. 创建 `docker-compose.yml` 文件：
-
-```yaml
-version: '3'
-services:
-  emby-users-panel:
-    image: emby-users-panel:latest
-    build: .
-    container_name: embyuserspanel
-    restart: always
-    ports:
-      - "8086:8086" # 管理面板端口
-      - "8085:8085" # 用户查询端口
-    volumes:
-      - ./data:/data # 数据持久化目录
-    environment:
-      - TZ=Asia/Shanghai
-      - APP_DATA_DIR=/data
-```
-
-2. 启动服务：
-
 ```bash
+git clone <repo-url> && cd emby-users-panel
 docker compose up -d
 ```
 
-### 方式二：Docker CLI
+默认的 `docker-compose.yml` 已包含端口映射、数据卷挂载与健康检查。
+
+### 方式二：Docker 手动运行
 
 ```bash
+# 构建镜像
 docker build -t emby-users-panel:latest .
+
+# 运行容器
 docker run -d \
   --name embyuserspanel \
-  -p 8086:8086 -p 8085:8085 \
-  -v $(pwd)/data:/data \
+  --restart always \
+  -p 8086:8086 \
+  -p 8085:8085 \
+  -v ./data:/data \
   -e TZ=Asia/Shanghai \
-  -e APP_DATA_DIR=/data \
   emby-users-panel:latest
 ```
 
-### 方式三：本地编译运行
-
-**环境要求**：Go 1.24+
-
-1. 克隆项目并进入目录。
-2. 安装依赖并运行：
+### 方式三：本地编译
 
 ```bash
+# 需要 Go 1.24+
 go mod tidy
-go run main.go
+go build -trimpath -o emby-users-panel .
+./emby-users-panel
 ```
-
-> **注意**：本地运行时请确保在项目根目录下执行命令，否则程序可能无法正确加载 `templates/` 和 `public/` 静态资源。
-
-## 📖 使用指南
 
 ### 访问地址
 
-- **管理后台**：`http://localhost:8086`
-  - 首次访问可能需要配置面板密码（如果在 `config.json` 中配置）。
-- **用户自助查询**：`http://localhost:8085/user/user.html`
+启动后通过浏览器访问：
 
-### 端口说明
+| 服务 | 地址 | 说明 |
+|:-----|:-----|:-----|
+| 管理面板 | `http://<host>:8086` | 管理员操作后台 |
+| 用户查询 | `http://<host>:8085` | 用户自助查询页面 |
+| 健康检查 | `http://<host>:8086/health` | 返回 `{"status":"ok"}` |
 
-| 端口 | 用途 | 说明 |
-|---|---|---|
-| `8086` | 管理端 | 管理员使用的后台，包含所有管理功能。 |
-| `8085` | 查询端 | 对外开放，仅提供用户状态查询接口。 |
+---
+
+## 配置指南
+
+### 首次设置
+
+1. 访问管理面板 `http://<host>:8086`
+2. 进入**系统设置 → 服务器管理**，添加 Emby 服务器
+3. 填写服务器地址（如 `http://192.168.1.100:8096`）和 API Key
+4. API Key 在 Emby 后台 **设置 → API 密钥** 页面生成
+
+所有设置均通过面板修改，自动持久化到 `/data/config.json`。
 
 ### 环境变量
 
-| 变量名 | 默认值 | 说明 |
-|---|---|---|
-| `TZ` | `Asia/Shanghai` | 容器时区设置，影响日志和计划任务时间。 |
-| `APP_DATA_DIR` | `/data` | 配置文件、数据库和日志的存储路径。 |
+| 变量 | 默认值 | 说明 |
+|:-----|:-------|:-----|
+| `APP_DATA_DIR` | `/data` | 运行时数据目录（配置、数据库、日志） |
+| `TZ` | `Asia/Shanghai` | 系统时区（影响定时任务与日期显示） |
 
-## 📂 目录结构
+### 每服务器独立配置
 
-```text
-Emby Users Panel/
-├── main.go                # 程序入口
-├── go.mod                 # Go 依赖定义
-├── Dockerfile             # Docker 构建文件
-├── docker-compose.yml     # Docker Compose 编排文件
-├── templates/             # 后端渲染模板 (HTML)
-│   ├── login.html
-│   └── dashboard.html
-├── public/                # 静态资源文件
-│   ├── assets/            # JS/CSS 资源
-│   └── user/              # 用户查询页面
-└── data/                  # [持久化] 运行数据目录
-    ├── config.json        # 主配置文件
-    ├── users/             # 用户数据库 (SQLite + JSON)
-    ├── log/               # 操作日志
-    └── rate_limit/        # 频率限制缓存
-```
+在面板中可为每台服务器单独覆盖以下设置，未设置的项自动继承全局配置：
 
-## 🛠️ 配置说明
-
-大部分配置可以通过管理后台的 **"设置"** 页面进行修改，包括：
-- **服务器配置**：Emby 地址、API Key。
-- **过期策略**：过期动作（禁用/删除）、从何处读取过期时间。
-- **邮件通知**：SMTP 服务器设置、发件人信息。
-- **面板安全**：修改面板访问密码。
+- 定时检查时间 / 是否启用自动任务
+- 过期处理策略（禁用 / 删除）
+- SMTP 邮件配置
+- 日志保留天数
+- 模板用户
 
 ---
-*Powered by Golang & SQLite*
 
+## 项目结构
 
-## 🔧 进阶运维
+```
+.
+├── main.go                # 入口：App 容器、路由注册、双端口服务、优雅关闭
+├── config.go              # 配置类型、ConfigStore（全局 + 单服务器合并逻辑）
+├── session.go             # 内存 Session 存储、Cookie 管理
+├── db.go                  # SQLite 连接池管理（按服务器一库一文件）
+├── emby.go                # Emby REST API 客户端（自动重试）
+├── email.go               # SMTP 邮件发送（SSL / STARTTLS）
+├── middleware.go           # 安全响应头、客户端 IP 提取、内存速率限制
+├── scheduler.go           # Cron 调度器（每分钟 tick，匹配各服务器检查时间）
+├── admin.go               # 管理端 GET/POST 路由、认证、面板渲染
+├── admin_actions.go       # 管理端 AJAX Action 处理（充值/创建/编辑/批量等）
+├── users.go               # 用户 CRUD、本地数据与 Emby 同步、缓存
+├── query.go               # 用户自助查询端路由与逻辑
+├── playback_reporting.go  # Playback Reporting 插件集成
+├── utils.go               # 工具函数（类型转换、日期处理、正则等）
+│
+├── public/
+│   ├── assets/
+│   │   ├── script.js      # 前端交互逻辑（AJAX、表格、弹窗等）
+│   │   └── style.css      # 全局样式（含暗黑模式变量）
+│   └── user/
+│       └── user.html      # 用户自助查询页面
+│
+├── templates/
+│   ├── dashboard.html     # 管理面板 Go 模板
+│   └── login.html         # 登录页 Go 模板
+│
+├── data/                  # 运行时数据（自动创建，Docker 中映射到宿主机）
+│   ├── config.json        # 全局配置文件
+│   ├── users/             # 每台服务器的 SQLite 数据库文件
+│   └── log/               # 操作日志文件
+│
+├── Dockerfile             # 多阶段构建（golang:1.24-alpine → alpine:3.20）
+├── docker-compose.yml     # 编排配置
+├── go.mod                 # Go 模块定义
+└── README.md
+```
 
-### 反向代理配置
+---
 
-建议使用 Nginx 或 Caddy 进行反向代理，并开启 HTTPS。
-请确保转发以下 Header 以获取正确的客户端 IP 和协议状态：
+## API 参考
 
-- `X-Forwarded-For`
-- `X-Forwarded-Proto`
+### 管理端（端口 8086）
 
-### 数据备份
+| 方法 | 路径 | 说明 |
+|:-----|:-----|:-----|
+| `GET` | `/` | 管理面板主页（未登录时显示登录页） |
+| `POST` | `/` | 登录认证 / AJAX 操作分发 |
+| `GET` | `/index.php` | 兼容路径，同 `/` |
+| `GET` | `/assets/*` | 静态资源（JS / CSS） |
+| `GET` | `/health` | 健康检查 |
 
-建议定期备份 `data/` 目录。
-该目录包含了：
-- `config.json`: 面板配置
-- `users/`: 用户数据库
-- `log/`: 操作日志
+#### AJAX Action 列表
 
-### 故障排查
+管理端所有操作通过 `POST /` 的 `action` 字段分发：
 
-**Q: 启动报错 `go.mod: unexpected input character '\ufeff'`**
-A: `go.mod` 文件编码若包含 BOM，请转换为 `UTF-8 (无 BOM)`。
+| Action | 说明 |
+|:-------|:-----|
+| `charge` | 单用户充值 |
+| `create` | 创建新用户 |
+| `save_edit` | 保存用户编辑 |
+| `delete` | 删除用户 |
+| `batch` | 批量操作（充值 / 修改 / 启用 / 禁用 / 删除） |
+| `refresh_cache` | 刷新用户缓存 |
+| `server_op` | 服务器管理操作（增删改切换） |
+| `settings_op` | 保存系统设置 |
+| `test_email` | 发送测试邮件 |
+| `backup` | 导出备份（GET，需 CSRF Token） |
+| `restore` | 导入备份 |
+| `get_users` | 获取用户列表 JSON |
+| `get_logs` | 获取操作日志 |
+| `run_auto_check` | 手动触发过期检测 |
 
-**Q: 提示 `module ... requires go >= 1.24`**
-A: 本项目使用了 Go 1.24 新特性，请升级 Go 环境或使用 Docker 部署。
+### 查询端（端口 8085）
 
-**Q: 页面无法访问 / 502**
-A: 检查容器是否运行：`docker logs embyuserspanel`。确认防火墙放行了 8086/8085 端口。
+| 方法 | 路径 | 说明 |
+|:-----|:-----|:-----|
+| `GET` | `/` | 重定向到用户查询页 |
+| `GET` | `/user/user.html` | 用户查询页面 |
+| `POST` | `/query.php` | 用户查询接口 |
+| `POST` | `/user/query.php` | 同上（兼容路径） |
 
-**Q: 查询接口提示 Token 无效**
-A: 若并在设置中开启了 `query_require_token`，请确保查询请求携带了正确的 `token` 参数或 `X-Query-Token` 请求头。
+---
 
+## 安全机制
 
+| 防护层 | 实现方式 |
+|:-------|:---------|
+| **密码存储** | bcrypt 哈希，不存储明文 |
+| **会话管理** | 内存 Session + HttpOnly / Secure / SameSite Cookie |
+| **CSRF 防护** | 每 Session 随机 Token，所有写操作校验 |
+| **安全响应头** | `X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、CSP、`Referrer-Policy` 等 |
+| **速率限制** | 内存滑动窗口，每 IP 60 秒内最多 10 次请求（查询端） |
+| **Token 验证** | 用户查询页可启用独立访问令牌（常量时间比较） |
+| **输入校验** | 用户名长度限制（64 字符）、表单参数消毒 |
+
+---
+
+## 开发指南
+
+```bash
+# 安装依赖
+go mod tidy
+
+# 运行
+go run .
+
+# 编译
+go build -trimpath -o emby-users-panel .
+
+# 测试
+go test ./...
+```
+
+### 构建版本注入
+
+Docker 构建时通过 `-ldflags` 自动注入版本号（日期格式）：
+
+```bash
+go build -ldflags="-s -w -X main.version=$(date +%Y%m%d)" -o emby-users-panel .
+```
+
+### 依赖
+
+| 模块 | 用途 |
+|:-----|:-----|
+| `golang.org/x/crypto` | bcrypt 密码哈希 |
+| `modernc.org/sqlite` | 纯 Go SQLite 驱动（无 CGO） |
+
+---
+
+## License
+
+[MIT](LICENSE)
