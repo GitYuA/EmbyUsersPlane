@@ -1,5 +1,5 @@
 ﻿<div align="center">
-
+此项目为测试阶段，暂未发布
 # EPanel
 
 轻量、完整的 Emby 用户生命周期管理面板。
